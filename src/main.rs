@@ -1,15 +1,11 @@
-use std::convert::Infallible;
 use std::net::SocketAddr;
 use hyper::{Body, Client, Request, Response, Server};
 use hyper::service::{make_service_fn, service_fn};
-use hyper::http::uri;
-use hyper::http::request;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
 
-async fn forward_request(req: Request<Body>) -> Result<Response<Body>, Error> {
-    println!("Request: {:?}", req);
+fn replace_authority(replacement: &str, req: Request<Body>) -> Result<Request<Body>, Error>{
     let (mut parts, body) = req.into_parts();
     let path_and_query = match parts.uri.path_and_query(){
         Some(s) => s.clone(),
@@ -17,13 +13,17 @@ async fn forward_request(req: Request<Body>) -> Result<Response<Body>, Error> {
     };
     parts.uri = hyper::Uri::builder()
         .scheme("http")
-        .authority("localhost:8000")
+        .authority(replacement)
         .path_and_query(path_and_query)
         .build()?;
+    Ok(Request::from_parts(parts, body))
+}
 
+
+async fn forward_request(req: Request<Body>) -> Result<Response<Body>, Error> {
     let client = Client::new();
-    let resp = client.request(Request::from_parts(parts, body)).await?;
-    println!("Resp: {:?}", resp);
+    let req = replace_authority("localhost:8000", req)?;
+    let resp = client.request(req).await?;
     Ok(resp)
 }
 
